@@ -1767,3 +1767,195 @@ class MABTest(BaseTest):
                 self.assertListEqual(pe1, pe2)
 
         os.remove('mab.pkl')
+    
+    def test_add_armstatus(self):
+
+        rng = np.random.RandomState(seed=9)
+        train_data = pd.DataFrame({'a': [0.1, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'b': [0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'c': [0, 0.1, 0.1, 0, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'd': [0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0, 0.1, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'decision': [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+                                   'reward': [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1]})
+
+        context_columns = ['a', 'b', 'c', 'd']
+
+        for lp in BaseTest.lps:
+            mab = MAB([1, 2], lp)
+            mab.fit(train_data['decision'], train_data['reward'])
+
+            # add the new arm
+            mab.add_arm(3)
+            self.assertEqual(mab._imp.arm_to_status[3],
+                             {'is_trained': False, 'is_warm': False, 'warm_started_by': None})
+
+        for cp in BaseTest.nps:
+            for lp in BaseTest.lps:
+
+                if not self.is_compatible(lp, cp):
+                    continue
+
+                mab = MAB([1, 2], lp, cp)
+                mab.fit(train_data['decision'], train_data['reward'], train_data[context_columns])
+
+                # add the new arm
+                mab.add_arm(3)
+                self.assertEqual(mab._imp.arm_to_status[3],
+                                 {'is_trained': False, 'is_warm': False, 'warm_started_by': None})
+
+    def test_partialfit_status(self):
+
+        rng = np.random.RandomState(seed=9)
+        train_data = pd.DataFrame({'a': [0.1, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'b': [0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'c': [0, 0.1, 0.1, 0, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'd': [0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0, 0.1, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'decision': [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+                                   'reward': [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1]})
+
+        context_columns = ['a', 'b', 'c', 'd']
+
+        for lp in BaseTest.lps:
+            if lp != LearningPolicy.Random():
+                mab = MAB([1, 2], lp)
+                mab.fit(train_data['decision'], train_data['reward'])
+
+                # add the new arm
+                mab.add_arm(3)
+                self.assertEqual(mab._imp.arm_to_status[3],
+                                 {'is_trained': False, 'is_warm': False, 'warm_started_by': None})
+                # Partial Fit
+                mab.partial_fit([1, 3, 3, 2], [1, 1, 0, 0])
+                self.assertEqual(mab._imp.arm_to_status[3],
+                                 {'is_trained': True, 'is_warm': False, 'warm_started_by': None})
+
+        for cp in BaseTest.nps:
+            for lp in BaseTest.lps:
+                if lp == LearningPolicy.Random() or cp == NeighborhoodPolicy.TreeBandit():
+                    continue
+                if not self.is_compatible(lp, cp):
+                    continue
+
+                mab = MAB([1, 2], lp, cp)
+                mab.fit(train_data['decision'], train_data['reward'], train_data[context_columns])
+
+                # add the new arm
+                mab.add_arm(3)
+                self.assertEqual(mab._imp.arm_to_status[3],
+                                 {'is_trained': False, 'is_warm': False, 'warm_started_by': None})
+                # Partial Fit
+                mab.partial_fit([1, 3, 3, 2], [1, 1, 0, 0], [[0, 0.1, 0, 0],
+                                                             [0.1, 0, 0.1, 0],
+                                                             [0, 0, 0, 0.1],
+                                                             [0, 0, 0.1, 0]])
+                self.assertEqual(mab._imp.arm_to_status[3],
+                                 {'is_trained': False, 'is_warm': False, 'warm_started_by': None})
+
+    def test_remove_arm(self):
+
+        rng = np.random.RandomState(seed=9)
+        train_data = pd.DataFrame({'a': [0.1, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'b': [0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'c': [0, 0.1, 0.1, 0, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'd': [0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0, 0.1, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'decision': [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+                                   'reward': [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1]})
+
+        context_columns = ['a', 'b', 'c', 'd']
+
+        for lp in BaseTest.lps:
+            if lp == LearningPolicy.Random():
+                continue
+            mab = MAB([1, 2], lp)
+            mab.fit(train_data['decision'], train_data['reward'])
+
+            # remove arm
+            mab.remove_arm(2)
+
+            self.assertEqual(mab._imp.arm_to_status,
+                             {1: {'is_trained': True, 'is_warm': False, 'warm_started_by': None}})
+
+        for cp in BaseTest.nps:
+            for lp in BaseTest.lps:
+                if lp == LearningPolicy.Random() or cp == NeighborhoodPolicy.TreeBandit():
+                    continue
+
+                if not self.is_compatible(lp, cp):
+                    continue
+
+                mab = MAB([1, 2], lp, cp)
+                mab.fit(train_data['decision'], train_data['reward'], train_data[context_columns])
+
+                # remove arm
+                mab.remove_arm(2)
+                self.assertEqual(mab._imp.arm_to_status,
+                                 {1: {'is_trained': False, 'is_warm': False, 'warm_started_by': None}})
+
+    def test_reset_status(self):
+        rng = np.random.RandomState(seed=9)
+        train_data = pd.DataFrame({'a': [0.1, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'b': [0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'c': [0, 0.1, 0.1, 0, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'd': [0, 0.1, 0, 0, 0.1, 0, 0.1, 0, 0, 0, 0.1, 0.1, 0, 0.1, 0, 0, 0.1, 0, 0.1, 0],
+                                   'decision': [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+                                   'reward': [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1]})
+
+        context_columns = ['a', 'b', 'c', 'd']
+
+        for lp in BaseTest.lps:
+            mab = MAB([1, 2], lp)
+            mab.fit(train_data['decision'], train_data['reward'])
+
+            # reset arms
+
+            mab._imp._reset_arm_to_status()
+            self.assertEqual(mab._imp.arm_to_status,
+                             {1: {'is_trained': False, 'is_warm': False, 'warm_started_by': None},
+                              2: {'is_trained': False, 'is_warm': False, 'warm_started_by': None}})
+
+        for cp in BaseTest.nps:
+            for lp in BaseTest.lps:
+
+                if lp == LearningPolicy.Random():
+                    continue
+
+                if not self.is_compatible(lp, cp):
+                    continue
+
+                mab = MAB([1, 2], lp, cp)
+                mab.fit(train_data['decision'], train_data['reward'], train_data[context_columns])
+
+                # reset arms
+
+                mab._imp._reset_arm_to_status()
+                self.assertEqual(mab._imp.arm_to_status,
+                                 {1: {'is_trained': False, 'is_warm': False, 'warm_started_by': None},
+                                  2: {'is_trained': False, 'is_warm': False, 'warm_started_by': None}})
+
+    def test_warm_arm_to_status(self):
+        for lp in BaseTest.lps:
+            _, mab = self.predict(arms=[1, 2, 3],
+                                  decisions=[1, 1, 1, 1, 2, 2, 2, 1, 2, 1],
+                                  rewards=[0, 1, 1, 0, 1, 0, 1, 1, 1, 1],
+                                  learning_policy=LearningPolicy.LinGreedy(epsilon=0.25),
+                                  context_history=[[0, 1, 2, 3, 5], [1, 1, 1, 1, 1], [0, 0, 1, 0, 0],
+                                                   [0, 2, 2, 3, 5], [1, 3, 1, 1, 1], [0, 0, 0, 0, 0],
+                                                   [0, 1, 4, 3, 5], [0, 1, 2, 4, 5], [1, 2, 1, 1, 3],
+                                                   [0, 2, 1, 0, 0]],
+                                  contexts=[[0, 1, 2, 3, 5], [1, 1, 1, 1, 1]],
+                                  seed=123456,
+                                  num_run=4,
+                                  is_predict=True)
+
+            # Before warm start
+            self.assertEqual(mab._imp.trained_arms, [1, 2])
+            self.assertEqual(mab._imp.arm_to_status,
+                             {1: {'is_trained': True, 'is_warm': False, 'warm_started_by': None},
+                              2: {'is_trained': True, 'is_warm': False, 'warm_started_by': None},
+                              3: {'is_trained': False, 'is_warm': False, 'warm_started_by': None}})
+            self.assertListEqual(mab.cold_arms, [3])
+
+            # Warm start
+            mab.warm_start(arm_to_features={1: [0, 1], 2: [0, 0], 3: [0.5, 0.5]}, distance_quantile=0.5)
+            self.assertListEqual(mab.cold_arms, list())
+
